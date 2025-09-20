@@ -1,0 +1,16 @@
+{
+    "programming_timeout": 6000,
+    "max_retries": 3,
+    "verify_programming": true,
+    "verbose_output": false,
+    "max_parallel_jobs": 12,
+    "port_scan_interval": 2.0,
+    "auto_detect_devices": true,
+    "log_detailed_output": true,
+    "max_devices_per_hub": 7,
+    "hub_programming_delay": 1.0,
+    "auto_install_cores": true,
+    "update_index_on_start": true,
+    "programming_mode": "Binary",
+    "execution_mode": "Continuous"
+}

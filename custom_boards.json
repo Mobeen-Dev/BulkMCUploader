@@ -1,0 +1,10 @@
+{
+  "Arduino Nano (Old Bootloader)": {
+    "fqbn": "arduino:avr:nano:cpu=atmega328old",
+    "core": "arduino:avr"
+  },
+  "Arduino Nano (New Bootloader)": {
+    "fqbn": "arduino:avr:nano:cpu=atmega328",
+    "core": "arduino:avr"
+  }
+}
