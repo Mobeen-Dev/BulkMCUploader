@@ -58,7 +58,11 @@ class ArduinoCLIProgrammer:
         """Check if Arduino CLI is installed and accessible"""
         try:
             result = subprocess.run(
-                ["arduino-cli", "version"], capture_output=True, text=True, timeout=10
+                ["arduino-cli", "version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
             return result.returncode == 0, result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -76,6 +80,7 @@ class ArduinoCLIProgrammer:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             if core not in result.stdout:
@@ -85,6 +90,7 @@ class ArduinoCLIProgrammer:
                     capture_output=True,
                     text=True,
                     timeout=300,  # 5 minutes for core installation
+                    creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
                 )
                 return install_result.returncode == 0, install_result.stderr
 
@@ -101,6 +107,7 @@ class ArduinoCLIProgrammer:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
             return result.returncode == 0, result.stderr
         except Exception as e:
@@ -122,7 +129,7 @@ class ArduinoCLIProgrammer:
             cmd.append(sketch_path)
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=self.timeout
+                cmd, capture_output=True, text=True, timeout=self.timeout, creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             return result.returncode == 0, result.stdout, result.stderr
@@ -150,7 +157,7 @@ class ArduinoCLIProgrammer:
                 cmd.append("--verbose")
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=self.timeout
+                cmd, capture_output=True, text=True, timeout=self.timeout, creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             return result.returncode == 0, result.stdout, result.stderr
@@ -175,7 +182,7 @@ class ArduinoCLIProgrammer:
             cmd.append(sketch_path)
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=self.timeout
+                cmd, capture_output=True, text=True, timeout=self.timeout, creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             return result.returncode == 0, result.stdout, result.stderr
@@ -193,6 +200,7 @@ class ArduinoCLIProgrammer:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             if result.returncode == 0:
@@ -217,6 +225,7 @@ class ArduinoCLIProgrammer:
                 capture_output=True,
                 text=True,
                 timeout=15,
+                creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
             )
 
             boards = []
@@ -340,11 +349,11 @@ class MCUProgrammerApp:
             "Arduino Uno": {"fqbn": "arduino:avr:uno", "core": "arduino:avr"},
             "Arduino Nano (Old Bootloader)": {
                 "fqbn": "arduino:avr:nano:cpu=atmega328old",
-                "core": "arduino:avr"
+                "core": "arduino:avr",
             },
             "Arduino Nano (New Bootloader)": {
                 "fqbn": "arduino:avr:nano:cpu=atmega328",
-                "core": "arduino:avr"
+                "core": "arduino:avr",
             },
             "Arduino Mega": {
                 "fqbn": "arduino:avr:mega:cpu=atmega2560",
@@ -380,14 +389,14 @@ class MCUProgrammerApp:
             "Teensy 4.0": {"fqbn": "teensy:avr:teensy40", "core": "teensy:avr"},
         }
         if os.path.exists(BOARDS_FILE):
-          try:
-              with open(BOARDS_FILE, "r") as f:
-                  custom_boards = json.load(f)
+            try:
+                with open(BOARDS_FILE, "r") as f:
+                    custom_boards = json.load(f)
 
-              self.supported_boards.update(custom_boards)  # merge into existing
+                self.supported_boards.update(custom_boards)  # merge into existing
 
-          except Exception as e:
-              self.log_message(f"⚠️ Failed to load custom boards: {str(e)}", "WARNING")
+            except Exception as e:
+                self.log_message(f"⚠️ Failed to load custom boards: {str(e)}", "WARNING")
 
         # Statistics
         self.stats = {
@@ -1030,97 +1039,100 @@ class MCUProgrammerApp:
 
         # Run detection in background thread
         threading.Thread(target=detect_async, daemon=True).start()
+
     def open_custom_board_adder(self):
-      """Open a small window to add a custom board with FQBN and core"""
-      custom_modal = ctk.CTkToplevel(self.root)
-      custom_modal.title("Add Custom Board")
-      custom_modal.geometry("500x320")
-      custom_modal.transient(self.root)
-      custom_modal.grab_set()
+        """Open a small window to add a custom board with FQBN and core"""
+        custom_modal = ctk.CTkToplevel(self.root)
+        custom_modal.title("Add Custom Board")
+        custom_modal.geometry("500x320")
+        custom_modal.transient(self.root)
+        custom_modal.grab_set()
 
-      # Frame inside modal
-      frame = ctk.CTkFrame(custom_modal)
-      frame.pack(padx=20, pady=20, fill="both", expand=True)
+        # Frame inside modal
+        frame = ctk.CTkFrame(custom_modal)
+        frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-      # Board name
-      ctk.CTkLabel(frame, text="Board Name:").pack(anchor="w")
-      board_name_entry = ctk.CTkEntry(frame, placeholder_text="e.g., Custom Uno")
-      board_name_entry.pack(fill="x", pady=5)
+        # Board name
+        ctk.CTkLabel(frame, text="Board Name:").pack(anchor="w")
+        board_name_entry = ctk.CTkEntry(frame, placeholder_text="e.g., Custom Uno")
+        board_name_entry.pack(fill="x", pady=5)
 
-      # FQBN
-      ctk.CTkLabel(frame, text="FQBN:").pack(anchor="w")
-      fqbn_entry = ctk.CTkEntry(frame, placeholder_text="e.g., arduino:avr:uno")
-      fqbn_entry.pack(fill="x", pady=5)
+        # FQBN
+        ctk.CTkLabel(frame, text="FQBN:").pack(anchor="w")
+        fqbn_entry = ctk.CTkEntry(frame, placeholder_text="e.g., arduino:avr:uno")
+        fqbn_entry.pack(fill="x", pady=5)
 
-      # Core
-      ctk.CTkLabel(frame, text="Core:").pack(anchor="w")
-      core_entry = ctk.CTkEntry(frame, placeholder_text="e.g., arduino:avr")
-      core_entry.pack(fill="x", pady=5)
+        # Core
+        ctk.CTkLabel(frame, text="Core:").pack(anchor="w")
+        core_entry = ctk.CTkEntry(frame, placeholder_text="e.g., arduino:avr")
+        core_entry.pack(fill="x", pady=5)
 
-      # Save action
-      def save_custom_board():
-        board_name = board_name_entry.get().strip()
-        fqbn = fqbn_entry.get().strip()
-        core = core_entry.get().strip()
+        # Save action
+        def save_custom_board():
+            board_name = board_name_entry.get().strip()
+            fqbn = fqbn_entry.get().strip()
+            core = core_entry.get().strip()
 
-        if not board_name or not fqbn or not core:
-            messagebox.showerror("Error", "Please fill in all fields.")
-            return
+            if not board_name or not fqbn or not core:
+                messagebox.showerror("Error", "Please fill in all fields.")
+                return
 
-        # Check for duplicate
-        if board_name in self.supported_boards:
-            messagebox.showerror("Duplicate", f"Board '{board_name}' already exists.")
-            return
+            # Check for duplicate
+            if board_name in self.supported_boards:
+                messagebox.showerror(
+                    "Duplicate", f"Board '{board_name}' already exists."
+                )
+                return
 
-        # Add to in-memory supported boards
-        new_board_data = {
-            "fqbn": fqbn,
-            "core": core
-        }
-        self.supported_boards[board_name] = new_board_data
+            # Add to in-memory supported boards
+            new_board_data = {"fqbn": fqbn, "core": core}
+            self.supported_boards[board_name] = new_board_data
 
-        # Update dropdown
-        self.board_combo.configure(values=list(self.supported_boards.keys()))
+            # Update dropdown
+            self.board_combo.configure(values=list(self.supported_boards.keys()))
 
-        # Save to custom_added_board.json
-        try:
-            custom_boards_path = BOARDS_FILE
+            # Save to custom_added_board.json
+            try:
+                custom_boards_path = BOARDS_FILE
 
-            # Load existing custom boards if file exists
-            if os.path.exists(custom_boards_path):
-                with open(custom_boards_path, "r") as f:
-                    custom_data = json.load(f)
-            else:
-                custom_data = {}
+                # Load existing custom boards if file exists
+                if os.path.exists(custom_boards_path):
+                    with open(custom_boards_path, "r") as f:
+                        custom_data = json.load(f)
+                else:
+                    custom_data = {}
 
-            # Add new board
-            custom_data[board_name] = new_board_data
+                # Add new board
+                custom_data[board_name] = new_board_data
 
-            # Save back to file
-            with open(custom_boards_path, "w") as f:
-                json.dump(custom_data, f, indent=2)
+                # Save back to file
+                with open(custom_boards_path, "w") as f:
+                    json.dump(custom_data, f, indent=2)
 
-            messagebox.showinfo("Saved", f"✅ Custom board '{board_name}' saved successfully!")
-            custom_modal.destroy()
+                messagebox.showinfo(
+                    "Saved", f"✅ Custom board '{board_name}' saved successfully!"
+                )
+                custom_modal.destroy()
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save board: {str(e)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save board: {str(e)}")
 
-      # Save Button
-      save_button = ctk.CTkButton(frame, text="➕ Add Board", command=save_custom_board)
-      save_button.pack(pady=15)
+        # Save Button
+        save_button = ctk.CTkButton(
+            frame, text="➕ Add Board", command=save_custom_board
+        )
+        save_button.pack(pady=15)
 
     def on_board_changed(self, selection):
         """Handle board selection change."""
         if selection in self.supported_boards:
-            if selection == "Custom" :
-              self.open_custom_board_adder()
+            if selection == "Custom":
+                self.open_custom_board_adder()
             board_config = self.supported_boards[selection]
             fqbn = board_config["fqbn"]
             core = board_config["core"]
             self.board_info_label.configure(text=f"FQBN: {fqbn}   CORE: {core}")
             self.log_message(f"📋 Selected board: {selection} ({fqbn})", "INFO")
-            
 
     def browse_file(self):
         if self.programming_mode.get() == "Binary":
@@ -1182,6 +1194,7 @@ class MCUProgrammerApp:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW  # suppress console window
                 )
 
                 if result.returncode == 0:
