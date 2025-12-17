@@ -12,5 +12,6 @@
     "auto_install_cores": true,
     "update_index_on_start": true,
     "programming_mode": "Binary",
-    "execution_mode": "Continuous"
+    "execution_mode": "Continuous",
+    "baud_rate": 9600
 }

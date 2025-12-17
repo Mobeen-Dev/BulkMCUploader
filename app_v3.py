@@ -1,6 +1,8 @@
 import glob
 import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
+from typing import Callable, Optional
+from threading import Thread
 import customtkinter as ctk
 import serial.tools.list_ports
 import threading
@@ -15,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import re
 
+Callback = Callable[[str, str], None]
 
 def resource_path(relative_path):
     try:
@@ -30,11 +33,10 @@ BOARDS_FILE = resource_path("custom_boards.json")
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("dark-blue")
 
-
 class ProgrammingResult:
     """Class to store programming results"""
 
-    def __init__(self, port, success, message, duration, board_type, fqbn):
+    def __init__(self, port, success, message, duration, board_type, fqbn, baud_rate, logger):
         self.port = port
         self.success = success
         self.message = message
@@ -43,12 +45,63 @@ class ProgrammingResult:
         self.fqbn = fqbn
         self.timestamp = datetime.now()
 
+        # Start serial monitor thread (runs max 60 seconds)
+        threading.Thread(
+            target=self.monitor_serial_output,
+            args=(logger, self.port, baud_rate),
+            daemon=True
+        ).start()
+
+    @staticmethod
+    def monitor_serial_output(logger, port, baud_rate=9600, timeout_seconds=120):
+        """Continuously read serial data for up to 1 minute or until unplugged"""
+        ser = None
+        start_time = time.time()
+
+        try:
+            ser = serial.Serial(port, baud_rate, timeout=1)
+            logger(f"📡 Started serial monitoring on {port} @ {baud_rate} baud", "MCU")
+
+            while True:
+                # Stop after timeout
+                if time.time() - start_time > timeout_seconds:
+                    logger(f"⏰ Timeout reached ({timeout_seconds}s). Stopping monitoring.", "MCU")
+                    break
+
+                try:
+                    if ser.in_waiting:
+                        line = ser.readline().decode(errors="ignore").strip()
+                        if line:
+                            logger(f"[{port}] {line}", "MCU")
+
+                    time.sleep(0.05)
+
+                except serial.SerialException as e:
+                    logger(f"❌ Device on {port} disconnected: {e}", "ERROR")
+                    break
+                except Exception as e:
+                    logger(f"⚠️ Unexpected error on {port}: {e}", "ERROR")
+                    break
+
+        except serial.SerialException as e:
+            logger(f"❌ Could not open serial port {port}: {e}", "ERROR")
+
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                    logger(f"🔌 Serial port {port} closed cleanly", "MCU")
+                except Exception as e:
+                    logger(f"⚠️ Error closing port {port}: {e}", "ERROR")
+
+            logger(f"🛑 Monitoring thread for {port} exited", "MCU")
 
 class ArduinoCLIProgrammer:
     """Arduino CLI based programmer for all supported boards"""
 
     def __init__(self, settings):
         self.settings = settings
+        self.baud_rate = 9600
         self.timeout = settings.get("programming_timeout", 60)
         self.max_retries = settings.get("max_retries", 3)
         self.verify_after_program = settings.get("verify_programming", True)
@@ -891,6 +944,8 @@ class MCUProgrammerApp:
             # Format message with consistent spacing for better readability
             if level == "SUCCESS":
                 log_entry = f"[{timestamp}] ✅ {message}\n"
+            elif level == "MCU":
+                log_entry = f" ──────➜ 💎 {message}\n"
             elif level == "ERROR":
                 log_entry = f"[{timestamp}] ❌ {message}\n"
             elif level == "WARNING":
@@ -1497,7 +1552,7 @@ class MCUProgrammerApp:
                 duration = time.time() - start_time
 
                 result = ProgrammingResult(
-                    port, success, message, duration, board_type, fqbn
+                    port, success, message, duration, board_type, fqbn, self.saved_data["baud_rate"], self.log_message
                 )
 
                 if success:
@@ -1519,7 +1574,7 @@ class MCUProgrammerApp:
 
                 if attempt == max_retries:
                     return ProgrammingResult(
-                        port, False, error_msg, duration, board_type, fqbn
+                        port, False, error_msg, duration, board_type, fqbn, self.saved_data["baud_rate"], self.log_message
                     )
                 else:
                     self.log_message(
@@ -1530,7 +1585,7 @@ class MCUProgrammerApp:
         # Should not reach here, but safety fallback
         duration = time.time() - start_time
         return ProgrammingResult(
-            port, False, "Max retries exceeded", duration, board_type, fqbn
+            port, False, "Max retries exceeded", duration, board_type, fqbn, self.saved_data["baud_rate"], self.log_message
         )
 
     def get_ports_with_hub_info(self):
@@ -1573,7 +1628,7 @@ class MCUProgrammerApp:
                         r"VID:PID=([0-9A-F]{4}:[0-9A-F]{4})", port.hwid
                     )
                     if vid_pid_match:
-                        vid_pid = vid_pid_match.ggroup(1)
+                        vid_pid = vid_pid_match.group(1)
                         # Use first part of location or VID:PID as grouping
                         port_info["hub_id"] = f"hub_{vid_pid.split(':')[0]}"
 
@@ -1716,7 +1771,8 @@ class MCUProgrammerApp:
         def _log():
             timestamp = time.strftime("%H:%M:%S")
             log_entry = f"[{timestamp}] {message}\n"
-
+            if level == "MCU":
+                log_entry = f" ──────➜ 💎 {message}\n"
             # Insert into terminal
             self.terminal.insert("end", log_entry)
 
@@ -1818,7 +1874,7 @@ class MCUProgrammerApp:
         """Open settings modal with Arduino CLI specific options"""
         settings_modal = ctk.CTkToplevel(self.root)
         settings_modal.title("Arduino CLI Settings")
-        settings_modal.geometry("650x800")
+        settings_modal.geometry("650x650")
         settings_modal.transient(self.root)
         settings_modal.grab_set()
 
@@ -1918,6 +1974,14 @@ class MCUProgrammerApp:
         )
         timeout_entry = ctk.CTkEntry(timeout_frame, textvariable=timeout_var, width=100)
         timeout_entry.pack(side="right", padx=10)
+
+        # Baude Rate
+        baud_rate  = ctk.CTkFrame(settings_frame)
+        baud_rate .pack(fill="x", pady=5)
+        ctk.CTkLabel(baud_rate , text="Baud Rate: ").pack(side="left", padx=10)
+        baud_var = ctk.StringVar(value=str(self.saved_data.get("baud_rate", 9600)))
+        baud_entry = ctk.CTkEntry(baud_rate , textvariable=baud_var, width=100)
+        baud_entry.pack(side="right", padx=10)
 
         # Max retries
         retry_frame = ctk.CTkFrame(settings_frame)
@@ -2054,6 +2118,7 @@ class MCUProgrammerApp:
                         "programming_mode": programming_mode_var.get(),
                         "execution_mode": execution_mode_var.get(),
                         "programming_timeout": int(timeout_var.get()),
+                        "baud_rate": int(baud_var.get()),
                         "max_retries": int(retry_var.get()),
                         "verify_programming": verify_var.get(),
                         "verbose_output": verbose_var.get(),
